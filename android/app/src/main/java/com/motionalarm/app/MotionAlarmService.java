@@ -117,7 +117,6 @@ public class MotionAlarmService extends Service implements SensorEventListener {
             lastMessage = "Could not start background monitoring: " + error.getMessage();
             stopMonitoring();
         }
-        // Swiping away the activity leaves this service running. System/user stops are respected.
         return START_NOT_STICKY;
     }
 
@@ -150,8 +149,6 @@ public class MotionAlarmService extends Service implements SensorEventListener {
 
     @SuppressLint("WakelockTimeout")
     private void keepCpuAwake() {
-        // Non-wakeup accelerometers need an awake CPU while the screen is locked.
-        // This lock belongs to the user-armed service and is released when monitoring stops.
         PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
         wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MotionAlarm:MotionMonitor");
         wakeLock.acquire();

@@ -26,37 +26,13 @@ ion-title {
   font-weight: 750;
   letter-spacing: -0.7px;
 }
-ion-title span {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--muted);
-}
-.device-note {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.device-note ion-icon {
-  font-size: 19px;
-}
 .page-shell {
   max-width: 1120px;
   margin: auto;
   padding: 28px 20px calc(18px + env(safe-area-inset-bottom));
 }
-.page-heading {
+.history-navigation {
   margin-bottom: 24px;
-}
-h1 {
-  margin: 0 0 10px;
-  font-size: clamp(27px, 4vw, 37px);
-  letter-spacing: -1.2px;
-  font-weight: 700;
 }
 .history-link {
   display: inline-flex;
@@ -78,26 +54,12 @@ h1 {
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: 14px;
-}
-.monitor-panel {
   padding: 22px;
   display: flex;
   flex-direction: column;
 }
-.panel-topline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: center;
-}
-h2 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.3px;
-}
 .state-label {
+  align-self: flex-end;
   font-size: 12px;
   color: var(--muted);
 }
@@ -123,7 +85,7 @@ h2 {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
-.monitor-status h3 {
+.monitor-status h1 {
   margin: 0 0 10px;
   font-size: clamp(22px, 3vw, 27px);
   font-weight: 650;
@@ -148,13 +110,6 @@ ion-button {
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-}
-.monitor-footnote {
-  margin: 12px 0 0;
-  text-align: center;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.6;
 }
 .is-armed {
   border-color: var(--armed-border);
@@ -227,17 +182,12 @@ meter {
   .topbar {
     padding-block: 18px;
   }
-  .device-note {
-    display: flex;
-  }
   .page-shell {
     padding-top: 38px;
   }
-  .page-heading {
+  .history-navigation {
     display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    align-items: end;
+    justify-content: flex-end;
     margin-bottom: 28px;
   }
   .history-link {

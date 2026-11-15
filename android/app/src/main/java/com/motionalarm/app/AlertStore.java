@@ -11,7 +11,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-// Android saves alerts here even when the Angular screen is not running.
 final class AlertStore {
     private final SharedPreferences preferences;
 

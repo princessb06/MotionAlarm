@@ -17,17 +17,15 @@
         <p id="appearance-help">Choose a theme for this device. Your choice is saved automatically.</p>
         <select
           id="appearance"
-          [ngModel]="theme.mode()"
-          (ngModelChange)="theme.setMode($event)"
+          [ngModel]="theme.currentTheme()"
+          (ngModelChange)="theme.setTheme($event)"
           aria-describedby="appearance-help"
         >
-          <option value="system">Use device setting</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
       </div>
-      <p class="intro">Choose how MotionAlarm responds to movement.</p>
-      @if (!ready && !error) {
+      @if (!settingsLoaded && !error) {
       <p role="status">Loading monitoring settings…</p>
       } @if (settings.state !== 'idle') {
       <p class="active-note">Stop the motion alarm on the monitor page before changing settings.</p>
@@ -39,7 +37,7 @@
           <select
             id="sensitivity"
             [(ngModel)]="settings.threshold"
-            [disabled]="!ready || settings.state !== 'idle'"
+            [disabled]="settingsLocked"
             aria-describedby="sensitivity-help"
           >
             <option [ngValue]="0.9">High · small movements</option>
@@ -50,32 +48,27 @@
         <div class="setting">
           <ion-toggle
             [(ngModel)]="settings.vibrationEnabled"
-            [disabled]="!ready || settings.state !== 'idle'"
+            [disabled]="settingsLocked"
             labelPlacement="start"
             justify="space-between"
             >Vibrate on alert</ion-toggle
           >
-          <p>A one-second vibration on supported phones.</p>
         </div>
         <div class="setting">
           <ion-toggle
             [(ngModel)]="settings.soundEnabled"
-            [disabled]="!ready || settings.state !== 'idle'"
+            [disabled]="settingsLocked"
             labelPlacement="start"
             justify="space-between"
             >Sound on alert</ion-toggle
           >
-          <p>Rings until you stop the alarm. Test alerts play for two seconds.</p>
         </div>
       </div>
     </section>
     <section class="settings-panel account-panel" aria-labelledby="account-heading">
       <h2 id="account-heading">Your account</h2>
       <p class="account-email">{{ auth.user()?.email }}</p>
-      <ion-button
-        fill="outline"
-        [disabled]="signOutState === 'signing-out' || !ready || settings.state !== 'idle'"
-        (click)="signOut()"
+      <ion-button fill="outline" [disabled]="signOutState === 'signing-out' || settingsLocked" (click)="signOut()"
         >{{ signOutState === 'signing-out' ? 'Signing out…' : 'Sign out' }}</ion-button
       >
       @if (settings.state !== 'idle') {

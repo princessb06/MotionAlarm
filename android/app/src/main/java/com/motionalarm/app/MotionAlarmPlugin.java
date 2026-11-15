@@ -274,7 +274,6 @@ public class MotionAlarmPlugin extends Plugin {
         stopAuthentication = null;
         MotionAlarmService service = MotionAlarmService.instance;
         if (service != null && !"idle".equals(service.state)) {
-            // A confirmation for an earlier session must never stop a newly armed session.
             if (!service.sessionId.equals(verifiedSession)) {
                 call.reject("The monitoring session changed. Tap Motion alarm stop to verify again.");
                 return;
@@ -408,6 +407,5 @@ public class MotionAlarmPlugin extends Plugin {
         if (receiver != null) {
             getContext().unregisterReceiver(receiver);
         }
-        // The foreground service belongs to the user-armed session, not to this activity.
     }
 }

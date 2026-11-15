@@ -78,7 +78,7 @@
 }
 
 :root {
-  @include light-theme;
+  @include dark-theme;
   --ion-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --ion-toolbar-background: var(--surface);
   --ion-toolbar-color: var(--ion-text-color);
@@ -88,12 +88,6 @@
   --ion-border-color: var(--line);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    @include dark-theme;
-  }
-}
-
-:root[data-theme='dark'] {
-  @include dark-theme;
+:root[data-theme='light'] {
+  @include light-theme;
 }

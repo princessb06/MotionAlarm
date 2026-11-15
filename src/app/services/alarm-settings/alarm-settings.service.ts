@@ -1,8 +1,10 @@
 import { Injectable } from '@angular/core';
 
-import type { NativeAlarmState } from '../home/native-alarm';
+import type { NativeAlarmState } from '../../home/native-alarm';
 
-@Injectable({ providedIn: 'root' })
+@Injectable({
+  providedIn: 'root',
+})
 export class AlarmSettingsService {
   state: 'idle' | 'starting' | 'countdown' | 'armed' | 'alert' = 'idle';
   threshold = 1.8;

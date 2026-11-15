@@ -15,18 +15,16 @@ import {
   NavController,
 } from '@ionic/angular';
 
-import { AuthService } from '../auth/auth.service';
 import { NATIVE_ALARM } from '../home/native-alarm';
-import { ThemeService } from '../theme/theme.service';
-
-import { AlarmSettingsService } from './alarm-settings.service';
+import { AlarmSettingsService } from '../services/alarm-settings/alarm-settings.service';
+import { AuthService } from '../services/auth/auth.service';
+import { ThemeService } from '../services/theme/theme.service';
 
 @Component({
   selector: 'app-settings',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.Eager,
-  templateUrl: 'settings.page.html',
-  styleUrls: ['settings.page.scss'],
+  templateUrl: './settings.page.html',
+  styleUrls: ['./settings.page.scss'],
   imports: [FormsModule, IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonToggle, IonToolbar],
 })
 export class SettingsPage implements OnInit, OnDestroy {
@@ -35,9 +33,9 @@ export class SettingsPage implements OnInit, OnDestroy {
   auth = inject(AuthService);
   signOutState: 'idle' | 'confirming' | 'signing-out' = 'idle';
   private alertController = inject(AlertController);
-  private nav = inject(NavController);
-  nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
-  ready = !this.nativeAndroid;
+  private navigation = inject(NavController);
+  isAndroidApp = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+  settingsLoaded = !this.isAndroidApp;
   error = '';
 
   private nativeAlarm = inject(NATIVE_ALARM);
@@ -45,8 +43,12 @@ export class SettingsPage implements OnInit, OnDestroy {
   private nativeListener: PluginListenerHandle | null = null;
   private destroyed = false;
 
+  get settingsLocked(): boolean {
+    return !this.settingsLoaded || this.settings.state !== 'idle';
+  }
+
   async ngOnInit(): Promise<void> {
-    if (!this.nativeAndroid) {
+    if (!this.isAndroidApp) {
       return;
     }
     try {
@@ -63,13 +65,16 @@ export class SettingsPage implements OnInit, OnDestroy {
   }
 
   ionViewWillEnter(): void {
-    if (this.nativeAndroid) {
+    if (this.isAndroidApp) {
       void this.loadSettings();
     }
   }
 
   async signOut(): Promise<void> {
-    if (this.signOutState !== 'idle') return;
+    if (this.signOutState !== 'idle') {
+      return;
+    }
+
     this.signOutState = 'confirming';
     try {
       const dialog = await this.alertController.create({
@@ -81,16 +86,21 @@ export class SettingsPage implements OnInit, OnDestroy {
         ],
       });
       await dialog.present();
-      const { role } = await dialog.onDidDismiss();
-      if (role !== 'confirm') return;
+      const answer = await dialog.onDidDismiss();
+      if (answer.role !== 'confirm') {
+        return;
+      }
 
       this.signOutState = 'signing-out';
       this.error = '';
       this.changeDetector.markForCheck();
       await this.auth.logout();
-      await this.nav.navigateRoot('/login');
+      await this.navigation.navigateRoot('/login');
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Could not sign out. Try again.';
+      this.error = 'Could not sign out. Try again.';
+      if (error instanceof Error) {
+        this.error = error.message;
+      }
     } finally {
       this.signOutState = 'idle';
       this.changeDetector.markForCheck();
@@ -99,14 +109,14 @@ export class SettingsPage implements OnInit, OnDestroy {
 
   private async loadSettings(): Promise<void> {
     try {
-      const snapshot = await this.nativeAlarm.getState();
+      const androidSettings = await this.nativeAlarm.getState();
       if (!this.destroyed) {
-        this.settings.applyNativeSettings(snapshot);
-        this.ready = true;
+        this.settings.applyNativeSettings(androidSettings);
+        this.settingsLoaded = true;
         this.error = '';
       }
     } catch {
-      this.ready = false;
+      this.settingsLoaded = false;
       this.error = 'Could not read Android monitoring settings. Return to the monitor and try again.';
     }
     if (!this.destroyed) {

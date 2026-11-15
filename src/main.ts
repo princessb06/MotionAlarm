@@ -11,7 +11,7 @@ import { IonicRouteStrategy, provideIonicAngular } from '@ionic/angular';
 
 import { AppComponent } from './app/app.component';
 import { routes } from './app/app.routes';
-import { ThemeService } from './app/theme/theme.service';
+import { ThemeService } from './app/services/theme/theme.service';
 
 bootstrapApplication(AppComponent, {
   providers: [

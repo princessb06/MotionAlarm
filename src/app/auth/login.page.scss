@@ -3,12 +3,6 @@
   margin: auto;
   padding: max(32px, env(safe-area-inset-top)) 20px max(32px, env(safe-area-inset-bottom));
 }
-.product-name {
-  margin: 0 0 24px;
-  color: var(--ion-color-primary);
-  font-size: 22px;
-  font-weight: 650;
-}
 .login-panel {
   padding: 24px;
   background: var(--surface);
@@ -19,12 +13,6 @@ h1 {
   margin: 0 0 12px;
   font-size: clamp(24px, 5vw, 30px);
   letter-spacing: -0.7px;
-}
-.intro {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.7;
-  margin: 0 0 24px;
 }
 .account-tabs {
   display: flex;
@@ -105,8 +93,6 @@ ion-button {
   line-height: 1.7;
   border-radius: 7px;
   overflow-wrap: anywhere;
-}
-.error-message {
   color: var(--danger-text);
   background: var(--danger-background);
 }

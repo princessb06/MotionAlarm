@@ -1,16 +1,14 @@
 <ion-content>
   <main class="login-shell">
-    <p class="product-name">MotionAlarm</p>
     <section class="login-panel" aria-labelledby="login-heading">
-      <h1 id="login-heading">{{ mode === 'register' ? 'Create your account' : 'Log in to MotionAlarm' }}</h1>
-      <p class="intro">Keep your movement alerts in your account. Test alarms are never saved.</p>
+      <h1 id="login-heading">{{ mode === 'register' ? 'Create your account' : 'Login' }}</h1>
       <div class="account-tabs" role="group" aria-label="Account access">
         <button
           type="button"
           [class.selected]="mode === 'login'"
           [attr.aria-pressed]="mode === 'login'"
-          [disabled]="busy"
-          (click)="changeMode('login')"
+          [disabled]="isSubmitting"
+          (click)="switchForm('login')"
         >
           Log in
         </button>
@@ -18,13 +16,13 @@
           type="button"
           [class.selected]="mode === 'register'"
           [attr.aria-pressed]="mode === 'register'"
-          [disabled]="busy"
-          (click)="changeMode('register')"
+          [disabled]="isSubmitting"
+          (click)="switchForm('register')"
         >
           Register
         </button>
       </div>
-      <form (ngSubmit)="submit()">
+      <form (ngSubmit)="submitForm()">
         <label for="email">Email</label>
         <input
           id="email"
@@ -35,43 +33,49 @@
           required
           maxlength="254"
           [(ngModel)]="email"
-          [disabled]="busy"
+          [disabled]="isSubmitting"
         />
         <label for="password">Password</label>
         <input
           id="password"
           name="password"
-          [type]="showPassword ? 'text' : 'password'"
+          [type]="passwordType"
           [placeholder]="mode === 'register' ? 'Create a password' : 'Enter your password'"
           [autocomplete]="mode === 'register' ? 'new-password' : 'current-password'"
           required
           [attr.minlength]="mode === 'register' ? minPasswordLength : null"
           [attr.maxlength]="mode === 'register' ? maxPasswordLength : null"
           [(ngModel)]="password"
-          [disabled]="busy"
+          [disabled]="isSubmitting"
         />
         @if (mode === 'register') {
         <label for="confirmation">Confirm password</label>
         <input
           id="confirmation"
           name="confirmation"
-          [type]="showPassword ? 'text' : 'password'"
+          [type]="passwordType"
           placeholder="Re-enter your password"
           autocomplete="new-password"
           required
           [attr.minlength]="minPasswordLength"
           [attr.maxlength]="maxPasswordLength"
-          [(ngModel)]="confirmation"
-          [disabled]="busy"
+          [(ngModel)]="confirmPassword"
+          [disabled]="isSubmitting"
         />
         }
         <label class="show-password-option" for="show-password">
-          <input id="show-password" name="showPassword" type="checkbox" [(ngModel)]="showPassword" [disabled]="busy" />
+          <input
+            id="show-password"
+            type="checkbox"
+            [checked]="passwordType === 'text'"
+            [disabled]="isSubmitting"
+            (change)="togglePassword()"
+          />
           {{ mode === 'register' ? 'Show passwords' : 'Show password' }}
         </label>
-        <ion-button type="submit" expand="block" [disabled]="busy"
-          >{{ busy ? 'Please wait…' : mode === 'register' ? 'Create account' : 'Log in' }}</ion-button
-        >
+        <ion-button type="submit" expand="block" [disabled]="isSubmitting">
+          @if (isSubmitting) { Please wait… } @else if (mode === 'register') { Create account } @else { Log in }
+        </ion-button>
       </form>
       @if (error || auth.error()) {
       <p class="error-message" role="alert">{{ error || auth.error() }}</p>

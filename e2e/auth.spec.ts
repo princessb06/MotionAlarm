@@ -84,7 +84,7 @@ for (const theme of ['light', 'dark'] as const) {
   }, testInfo) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.emulateMedia({ colorScheme: theme });
+    await page.addInitScript((mode) => localStorage.setItem('motion-alarm-theme', mode), theme);
     await page.goto('/login');
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const email = page.getByLabel('Email', { exact: true });

@@ -11,46 +11,46 @@ import { IonButton, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar } from 
 import { addIcons } from 'ionicons';
 import { settingsOutline, shieldCheckmarkOutline, shieldOutline, warningOutline } from 'ionicons/icons';
 
-import { AlertHistoryService } from '../alert-history/alert-history.service';
-import { AlarmSettingsService } from '../settings/alarm-settings.service';
+import { AlarmSettingsService } from '../services/alarm-settings/alarm-settings.service';
+import { AlertHistoryService } from '../services/alert-history/alert-history.service';
 
 import { AlarmSound } from './alarm-sound';
 import { NATIVE_ALARM } from './native-alarm';
 import type { NativeAlarmState } from './native-alarm';
 
-// Some iPhones require permission from a button tap before sending motion events.
 type MotionPermission = typeof DeviceMotionEvent & {
   requestPermission?: () => Promise<'granted' | 'denied'>;
 };
 
+const COUNTDOWN_SECONDS = 5;
+
 @Component({
   selector: 'app-home',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.Eager,
-  templateUrl: 'home.page.html',
-  styleUrls: ['home.page.scss'],
+  templateUrl: './home.page.html',
+  styleUrls: ['./home.page.scss'],
   imports: [DecimalPipe, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar],
 })
 export class HomePage implements OnInit, OnDestroy {
   history = inject(AlertHistoryService);
   settings = inject(AlarmSettingsService);
-  countdown = 5;
-  nativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
-  nativeReady = false;
-  strength = 0;
+  countdownSeconds = COUNTDOWN_SECONDS;
+  isAndroidApp = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+  androidAlarmReady = false;
+  movementLevel = 0;
   sensorError = '';
   feedback = '';
-  isDisarming = false;
-  disarmError = '';
+  isStoppingAlarm = false;
+  stopError = '';
 
   private changeDetector = inject(ChangeDetectorRef);
   private motionListener: PluginListenerHandle | null = null;
   private countdownTimer: number | null = null;
-  private sensorReady = false;
+  private receivedMotion = false;
   private destroyed = false;
-  private baselineX = 0;
-  private baselineY = 0;
-  private baselineZ = 0;
+  private restingX = 0;
+  private restingY = 0;
+  private restingZ = 0;
   private alarmSound = new AlarmSound();
   private nativeAlarm = inject(NATIVE_ALARM);
   private nativeListener: PluginListenerHandle | null = null;
@@ -60,49 +60,48 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    if (this.nativeAndroid) {
-      void this.initializeNative();
+    if (this.isAndroidApp) {
+      void this.connectToAndroidAlarm();
     }
   }
 
-  private async initializeNative(): Promise<void> {
+  private async connectToAndroidAlarm(): Promise<void> {
     try {
       this.nativeListener = await this.nativeAlarm.addListener('stateChanged', () => {
-        void this.refreshNativeState();
+        void this.readAndroidAlarmState();
       });
       if (this.destroyed) {
         await this.nativeListener.remove();
         return;
       }
-      await this.history.initialize();
-      await this.refreshNativeState();
+      await this.history.prepareAndroidHistory();
+      await this.readAndroidAlarmState();
     } catch (error) {
       this.sensorError = this.errorMessage(error, 'Could not connect to Android background monitoring.');
-      // Restore an older active session so it can be stopped before switching account ownership.
-      await this.refreshNativeState();
+      await this.readAndroidAlarmState();
     } finally {
-      this.nativeReady = true;
+      this.androidAlarmReady = true;
       this.history.loadingHistory = false;
       this.changeDetector.markForCheck();
     }
   }
 
-  private applyNativeState(snapshot: NativeAlarmState): void {
+  private showAndroidAlarmState(androidState: NativeAlarmState): void {
     if (this.destroyed) {
       return;
     }
-    this.settings.applyNativeSettings(snapshot);
-    this.countdown = snapshot.countdown;
-    this.strength = snapshot.strength;
-    this.history.replaceNativeAlerts(snapshot.alerts, snapshot.historyOwner);
-    this.sensorError = snapshot.message;
+    this.settings.applyNativeSettings(androidState);
+    this.countdownSeconds = androidState.countdown;
+    this.movementLevel = androidState.strength;
+    this.history.showUnsyncedAndroidAlerts(androidState.alerts, androidState.historyOwner);
+    this.sensorError = androidState.message;
     this.changeDetector.markForCheck();
   }
 
-  private async refreshNativeState(): Promise<void> {
+  private async readAndroidAlarmState(): Promise<void> {
     try {
-      const snapshot = await this.nativeAlarm.getState();
-      this.applyNativeState(snapshot);
+      const androidState = await this.nativeAlarm.getState();
+      this.showAndroidAlarmState(androidState);
     } catch (error) {
       this.history.storageError = this.errorMessage(error, 'Could not read Android alert history.');
       this.changeDetector.markForCheck();
@@ -116,15 +115,15 @@ export class HomePage implements OnInit, OnDestroy {
     return fallback;
   }
 
-  async startMonitoring(): Promise<void> {
-    if (this.settings.state !== 'idle' || this.isDisarming) {
+  async startAlarm(): Promise<void> {
+    if (this.settings.state !== 'idle' || this.isStoppingAlarm) {
       return;
     }
     this.sensorError = '';
     this.feedback = '';
-    this.disarmError = '';
+    this.stopError = '';
 
-    if (this.nativeAndroid) {
+    if (this.isAndroidApp) {
       await this.startAndroidMonitoring();
     } else {
       await this.startBrowserMonitoring();
@@ -132,18 +131,18 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   private async startAndroidMonitoring(): Promise<void> {
-    if (!this.nativeReady) {
+    if (!this.androidAlarmReady) {
       return;
     }
     this.settings.state = 'starting';
     try {
-      await this.history.initialize();
+      await this.history.prepareAndroidHistory();
       await this.nativeAlarm.start({
         threshold: this.settings.threshold,
         soundEnabled: this.settings.soundEnabled,
         vibrationEnabled: this.settings.vibrationEnabled,
       });
-      await this.refreshNativeState();
+      await this.readAndroidAlarmState();
     } catch (error) {
       this.settings.state = 'idle';
       this.sensorError = this.errorMessage(error, 'Could not start Android background monitoring.');
@@ -160,48 +159,46 @@ export class HomePage implements OnInit, OnDestroy {
 
     this.settings.state = 'starting';
     try {
-      await this.requestBrowserAccess();
+      await this.askForBrowserPermissions();
 
       if (this.destroyed || document.hidden || this.settings.state !== 'starting') {
         this.settings.state = 'idle';
         return;
       }
 
-      this.sensorReady = false;
-      this.strength = 0;
+      this.receivedMotion = false;
+      this.movementLevel = 0;
       this.motionListener = await Motion.addListener('accel', (event) => {
-        this.checkMovement(event);
+        this.measureMovement(event);
       });
 
       if (this.destroyed || document.hidden || this.settings.state !== 'starting') {
-        await this.stopMonitoring();
+        await this.stopAlarm();
         return;
       }
 
       this.startCountdown();
     } catch (error) {
-      await this.stopMonitoring();
+      await this.stopAlarm();
       this.sensorError = this.errorMessage(error, 'Could not start the motion sensor. Check permission and try again.');
     } finally {
       this.changeDetector.markForCheck();
     }
   }
 
-  private async requestBrowserAccess(): Promise<void> {
+  private async askForBrowserPermissions(): Promise<void> {
     const motionEvent = DeviceMotionEvent as MotionPermission;
-    let motionPermission = Promise.resolve('granted');
-    let soundPermission = Promise.resolve();
+    let motionPermissionRequest = Promise.resolve('granted');
+    let audioRequest = Promise.resolve();
 
-    // Phones need both requests to start during the same button tap, before either await.
     if (typeof motionEvent.requestPermission === 'function') {
-      motionPermission = motionEvent.requestPermission();
+      motionPermissionRequest = motionEvent.requestPermission();
     }
     if (this.settings.soundEnabled) {
-      soundPermission = this.alarmSound.prepare();
+      audioRequest = this.alarmSound.prepare();
     }
 
-    const results = await Promise.all([motionPermission, soundPermission]);
-    const permission = results[0];
+    const [permission] = await Promise.all([motionPermissionRequest, audioRequest]);
     if (permission !== 'granted') {
       throw new Error(
         'Motion permission was denied. Allow Motion & Orientation in your browser settings, then arm again.',
@@ -210,7 +207,7 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   private startCountdown(): void {
-    this.countdown = 5;
+    this.countdownSeconds = COUNTDOWN_SECONDS;
     this.settings.state = 'countdown';
     this.countdownTimer = window.setInterval(() => {
       this.updateCountdown();
@@ -218,58 +215,56 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   private updateCountdown(): void {
-    this.countdown--;
-    if (this.countdown === 0) {
+    this.countdownSeconds--;
+    if (this.countdownSeconds === 0) {
       this.clearCountdown();
-      if (this.sensorReady) {
+      if (this.receivedMotion) {
         this.settings.state = 'armed';
       } else {
-        void this.stopMonitoring();
+        void this.stopAlarm();
         this.sensorError =
           'No motion readings arrived. Try a supported phone, check sensor permission, and arm again. Test alerts work without a sensor.';
       }
     }
-    // Timers and sensor callbacks must notify Angular's zoneless change detection.
     this.changeDetector.markForCheck();
   }
 
-  private checkMovement(event: AccelListenerEvent): void {
-    if (this.settings.state !== 'starting' && this.settings.state !== 'countdown' && this.settings.state !== 'armed') {
+  private measureMovement(event: AccelListenerEvent): void {
+    const alarmState = this.settings.state;
+    if (alarmState === 'idle' || alarmState === 'alert') {
       return;
     }
 
-    const sample = event.accelerationIncludingGravity;
-    if (!sample) {
+    const reading = event.accelerationIncludingGravity;
+    if (!reading) {
       return;
     }
-    if (!Number.isFinite(sample.x) || !Number.isFinite(sample.y) || !Number.isFinite(sample.z)) {
-      return;
-    }
-
-    this.sensorReady = true;
-    if (this.settings.state === 'countdown' || this.settings.state === 'starting') {
-      // Remember the resting position. Keep this baseline fixed after arming.
-      this.baselineX = sample.x;
-      this.baselineY = sample.y;
-      this.baselineZ = sample.z;
+    if (!Number.isFinite(reading.x) || !Number.isFinite(reading.y) || !Number.isFinite(reading.z)) {
       return;
     }
 
-    const x = sample.x - this.baselineX;
-    const y = sample.y - this.baselineY;
-    const z = sample.z - this.baselineZ;
-    this.strength = Math.sqrt(x * x + y * y + z * z);
+    this.receivedMotion = true;
+    if (alarmState !== 'armed') {
+      this.restingX = reading.x;
+      this.restingY = reading.y;
+      this.restingZ = reading.z;
+      return;
+    }
 
-    if (this.strength >= this.settings.threshold) {
-      this.triggerBrowserAlarm();
+    const changeX = reading.x - this.restingX;
+    const changeY = reading.y - this.restingY;
+    const changeZ = reading.z - this.restingZ;
+    this.movementLevel = Math.hypot(changeX, changeY, changeZ);
+
+    if (this.movementLevel >= this.settings.threshold) {
+      this.ringBrowserAlarm();
     }
     this.changeDetector.markForCheck();
   }
 
-  private triggerBrowserAlarm(): void {
-    // Change state first so the next sensor event cannot create another alert.
+  private ringBrowserAlarm(): void {
     this.settings.state = 'alert';
-    this.history.createAlert('Movement', this.strength);
+    this.history.recordMovement(this.movementLevel);
     void this.vibratePhone();
     if (this.settings.soundEnabled) {
       try {
@@ -280,21 +275,21 @@ export class HomePage implements OnInit, OnDestroy {
     }
   }
 
-  async stopMonitoring(): Promise<void> {
-    if (this.nativeAndroid) {
-      if (this.isDisarming) {
+  async stopAlarm(): Promise<void> {
+    if (this.isAndroidApp) {
+      if (this.isStoppingAlarm) {
         return;
       }
-      this.isDisarming = true;
-      this.disarmError = '';
+      this.isStoppingAlarm = true;
+      this.stopError = '';
       this.changeDetector.markForCheck();
       try {
-        const snapshot = await this.nativeAlarm.stop();
-        this.applyNativeState(snapshot);
+        const androidState = await this.nativeAlarm.stop();
+        this.showAndroidAlarmState(androidState);
       } catch (error) {
-        this.disarmError = this.errorMessage(error, 'Verification did not finish. Tap Motion alarm stop to try again.');
+        this.stopError = this.errorMessage(error, 'Verification did not finish. Tap Motion alarm stop to try again.');
       } finally {
-        this.isDisarming = false;
+        this.isStoppingAlarm = false;
         this.changeDetector.markForCheck();
       }
       return;
@@ -302,7 +297,7 @@ export class HomePage implements OnInit, OnDestroy {
     this.alarmSound.stop();
     this.clearCountdown();
     this.settings.state = 'idle';
-    this.strength = 0;
+    this.movementLevel = 0;
     const listener = this.motionListener;
     this.motionListener = null;
     if (listener) {
@@ -322,27 +317,25 @@ export class HomePage implements OnInit, OnDestroy {
     }
   }
 
-  async createTestAlert(): Promise<void> {
-    if (this.settings.state !== 'idle' || this.isDisarming) {
+  async testAlarm(): Promise<void> {
+    if (this.settings.state !== 'idle' || this.isStoppingAlarm) {
       return;
     }
-    if (this.nativeAndroid) {
+    if (this.isAndroidApp) {
       try {
-        const snapshot = await this.nativeAlarm.createTestAlert({ soundEnabled: this.settings.soundEnabled });
-        this.applyNativeState(snapshot);
+        const androidState = await this.nativeAlarm.createTestAlert({ soundEnabled: this.settings.soundEnabled });
+        this.showAndroidAlarmState(androidState);
       } catch (error) {
         this.history.storageError = this.errorMessage(error, 'Could not create the Android test alert.');
         this.changeDetector.markForCheck();
         return;
       }
-    } else {
-      if (this.settings.soundEnabled) {
-        try {
-          await this.alarmSound.prepare();
-          this.alarmSound.start(true);
-        } catch (error) {
-          this.sensorError = this.errorMessage(error, 'The test alarm sound could not start.');
-        }
+    } else if (this.settings.soundEnabled) {
+      try {
+        await this.alarmSound.prepare();
+        this.alarmSound.start(true);
+      } catch (error) {
+        this.sensorError = this.errorMessage(error, 'The test alarm sound could not start.');
       }
     }
     this.feedback = 'Test alarm started. No alert was saved.';
@@ -357,28 +350,31 @@ export class HomePage implements OnInit, OnDestroy {
     try {
       await Haptics.vibrate({ duration: 1000 });
     } catch {
-      this.feedback = this.feedback
-        ? this.feedback + ' Vibration is unavailable on this device.'
-        : 'Movement detected, but vibration is unavailable on this device.';
+      if (this.feedback) {
+        this.feedback += ' Vibration is unavailable on this device.';
+      } else {
+        this.feedback = 'Movement detected, but vibration is unavailable on this device.';
+      }
       this.changeDetector.markForCheck();
     }
   }
 
   @HostListener('document:visibilitychange')
   onVisibilityChange(): void {
-    if (this.nativeAndroid) {
+    if (this.isAndroidApp) {
       if (!document.hidden) {
-        void this.refreshNativeState();
+        void this.readAndroidAlarmState();
       }
       return;
     }
     if (document.hidden) {
-      this.alarmSound.stop();
-    }
-    if (document.hidden && this.settings.state !== 'idle') {
-      void this.stopMonitoring();
-      this.sensorError = 'Monitoring stopped when the app left the screen. Keep MotionAlarm open and arm again.';
-      this.changeDetector.markForCheck();
+      if (this.settings.state === 'idle') {
+        this.alarmSound.stop();
+      } else {
+        void this.stopAlarm();
+        this.sensorError = 'Monitoring stopped when the app left the screen. Keep MotionAlarm open and arm again.';
+        this.changeDetector.markForCheck();
+      }
     }
   }
 
@@ -388,8 +384,8 @@ export class HomePage implements OnInit, OnDestroy {
     if (this.nativeListener) {
       void this.nativeListener.remove();
     }
-    if (!this.nativeAndroid) {
-      void this.stopMonitoring();
+    if (!this.isAndroidApp) {
+      void this.stopAlarm();
     }
   }
 }

@@ -1,4 +1,3 @@
-// Browsers use a generated tone. The Android service uses the phone's alarm sound.
 export class AlarmSound {
   private context: AudioContext | null = null;
   private oscillator: OscillatorNode | null = null;
@@ -13,7 +12,7 @@ export class AlarmSound {
     await this.context.resume();
   }
 
-  start(preview = false): void {
+  start(isTestAlarm = false): void {
     this.stop();
     if (this.context === null || this.context.state !== 'running') {
       throw new Error('Alarm sound could not start. Check your browser audio permission.');
@@ -37,7 +36,7 @@ export class AlarmSound {
         }
       }
     }, 450);
-    if (preview) {
+    if (isTestAlarm) {
       this.previewTimer = window.setTimeout(() => {
         this.stop();
       }, 2000);

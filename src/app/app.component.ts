@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core';
 import { IonApp, IonRouterOutlet, NavController } from '@ionic/angular';
 
-import { AuthService } from './auth/auth.service';
+import { AuthService } from './services/auth/auth.service';
 
 @Component({
   selector: 'app-root',
@@ -12,11 +12,13 @@ import { AuthService } from './auth/auth.service';
 })
 export class AppComponent {
   private auth = inject(AuthService);
-  private nav = inject(NavController);
+  private navigation = inject(NavController);
 
   constructor() {
     effect(() => {
-      if (this.auth.initialized() && !this.auth.user()) void this.nav.navigateRoot('/login');
+      if (!this.auth.user()) {
+        void this.navigation.navigateRoot('/login');
+      }
     });
   }
 }

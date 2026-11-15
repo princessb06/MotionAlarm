@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import { environment } from '../../environments/environment';
+import { environment } from '../../../environments/environment';
 
 export class ApiError extends Error {
   constructor(
@@ -12,23 +12,32 @@ export class ApiError extends Error {
   }
 }
 
-@Injectable({ providedIn: 'root' })
+@Injectable({
+  providedIn: 'root',
+})
 export class ApiService {
-  async request<T>(path: string, method = 'GET', body?: unknown, token?: string, prefer?: string): Promise<T> {
-    if (!environment.supabaseUrl || !environment.supabasePublishableKey)
+  async request<T>(path: string, method = 'GET', body?: unknown, accessToken?: string, prefer?: string): Promise<T> {
+    if (!environment.supabaseUrl || !environment.supabasePublishableKey) {
       throw new ApiError(503, 'NOT_CONFIGURED', 'The account service is not configured. Please contact the app owner.');
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       apikey: environment.supabasePublishableKey,
     };
-    if (token) headers['Authorization'] = 'Bearer ' + token;
-    if (prefer) headers['Prefer'] = prefer;
+    if (accessToken) {
+      headers['Authorization'] = 'Bearer ' + accessToken;
+    }
+    if (prefer) {
+      headers['Prefer'] = prefer;
+    }
+
     let response: Response;
     try {
       response = await fetch(environment.supabaseUrl + path, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(20000),
       });
     } catch {
@@ -38,12 +47,18 @@ export class ApiService {
         'Could not connect to the account service. Check your connection and try again.',
       );
     }
-    if (response.status === 204) return undefined as T;
-    const text = await response.text();
-    if (!text && response.ok) return undefined as T;
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const responseText = await response.text();
+    if (!responseText && response.ok) {
+      return undefined as T;
+    }
+
     let data;
     try {
-      data = JSON.parse(text);
+      data = JSON.parse(responseText);
     } catch {
       throw new ApiError(
         502,
@@ -51,12 +66,14 @@ export class ApiService {
         'The account service returned an unexpected response. Please try again.',
       );
     }
-    if (!response.ok)
+    if (!response.ok) {
       throw new ApiError(
         response.status,
         data.code || data.error_code || data.error || 'REQUEST_FAILED',
         data.message || data.msg || data.error_description || 'The request could not be completed.',
       );
+    }
+
     return data as T;
   }
 }

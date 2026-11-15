@@ -1,10 +1,10 @@
 import { inject, Injectable, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 
-import { environment } from '../../environments/environment';
-import { ApiError, ApiService } from '../api/api-request';
-import { NATIVE_ALARM } from '../home/native-alarm';
-import { AlarmSettingsService } from '../settings/alarm-settings.service';
+import { environment } from '../../../environments/environment';
+import { NATIVE_ALARM } from '../../home/native-alarm';
+import { AlarmSettingsService } from '../alarm-settings/alarm-settings.service';
+import { ApiError, ApiService } from '../api/api.service';
 
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 48;
@@ -27,24 +27,25 @@ interface AuthResponse {
   expires_in?: number;
 }
 
-@Injectable({ providedIn: 'root' })
+@Injectable({
+  providedIn: 'root',
+})
 export class AuthService {
   readonly user = signal<AccountUser | null>(null);
   readonly error = signal('');
-  readonly initialized = signal(false);
   private readonly settings = inject(AlarmSettingsService);
   private readonly api = inject(ApiService);
   private readonly nativeAlarm = inject(NATIVE_ALARM);
   private readonly storageKey = 'motion-alarm-supabase-login-' + environment.supabaseUrl;
   private session: LoginSession | null = null;
-  private refreshing?: Promise<void>;
-
-  readonly ready = Promise.resolve();
+  private tokenRefresh?: Promise<void>;
 
   constructor() {
-    this.restoreLogin();
+    this.restoreSavedLogin();
     window.addEventListener('storage', (event) => {
-      if (event.key === this.storageKey) this.restoreLogin();
+      if (event.key === this.storageKey) {
+        this.restoreSavedLogin();
+      }
     });
   }
 
@@ -61,8 +62,8 @@ export class AuthService {
       throw new ApiError(400, 'invalid_password_length', 'Enter a password between 8 and 48 characters.');
     }
 
-    const settings = await this.api.request<{ mailer_autoconfirm: boolean }>('/auth/v1/settings');
-    if (!settings.mailer_autoconfirm) {
+    const accountSettings = await this.api.request<{ mailer_autoconfirm: boolean }>('/auth/v1/settings');
+    if (!accountSettings.mailer_autoconfirm) {
       throw new ApiError(
         503,
         'email_confirmation_enabled',
@@ -74,21 +75,25 @@ export class AuthService {
     this.saveLogin(this.readSession(response));
   }
 
-  // Refresh expired tokens here so alert functions only need to ask for a token.
-  async getToken(expectedUserId: string): Promise<string> {
+  async getAccessToken(expectedUserId: string): Promise<string> {
     const session = this.session;
-    if (!session || session.user.uid !== expectedUserId)
+    if (!session || session.user.uid !== expectedUserId) {
       throw new ApiError(401, 'SESSION_CHANGED', 'Log in to access your alerts.');
+    }
+
     if (session.expiresAt < Date.now() + 60000) {
-      if (!this.refreshing) {
-        this.refreshing = this.refreshLogin(session).finally(() => {
-          this.refreshing = undefined;
+      if (!this.tokenRefresh) {
+        this.tokenRefresh = this.refreshLogin(session).finally(() => {
+          this.tokenRefresh = undefined;
         });
       }
-      await this.refreshing;
+      await this.tokenRefresh;
     }
-    if (!this.session || this.session.user.uid !== expectedUserId)
+
+    if (!this.session || this.session.user.uid !== expectedUserId) {
       throw new ApiError(401, 'SESSION_CHANGED', 'Your account changed. Reopen history and try again.');
+    }
+
     return this.session.accessToken;
   }
 
@@ -97,10 +102,12 @@ export class AuthService {
       const response = await this.api.request<AuthResponse>('/auth/v1/token?grant_type=refresh_token', 'POST', {
         refresh_token: session.refreshToken,
       });
-      const refreshed = this.readSession(response);
+      const newSession = this.readSession(response);
       if (this.session === session) {
-        if (refreshed.user.uid !== session.user.uid) throw new ApiError(401, 'SESSION_CHANGED', 'Please log in again.');
-        this.saveLogin(refreshed);
+        if (newSession.user.uid !== session.user.uid) {
+          throw new ApiError(401, 'SESSION_CHANGED', 'Please log in again.');
+        }
+        this.saveLogin(newSession);
       }
     } catch (error) {
       if (
@@ -109,8 +116,9 @@ export class AuthService {
         error.status < 500 &&
         error.status !== 429 &&
         this.session === session
-      )
+      ) {
         this.forgetLogin();
+      }
       throw error;
     }
   }
@@ -119,12 +127,17 @@ export class AuthService {
     if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
       this.settings.applyNativeSettings(await this.nativeAlarm.getState());
     }
-    if (this.settings.state !== 'idle') throw new Error('Stop the motion alarm on the monitor before signing out.');
+    if (this.settings.state !== 'idle') {
+      throw new Error('Stop the motion alarm on the monitor before signing out.');
+    }
     if (this.session && navigator.onLine) {
       try {
         await this.api.request('/auth/v1/logout?scope=local', 'POST', undefined, this.session.accessToken);
       } catch (error) {
-        if (!(error instanceof ApiError && (error.status === 0 || error.status === 401))) throw error;
+        const canSignOutLocally = error instanceof ApiError && (error.status === 0 || error.status === 401);
+        if (!canSignOutLocally) {
+          throw error;
+        }
       }
     }
     localStorage.removeItem(this.storageKey);
@@ -155,10 +168,16 @@ export class AuthService {
     };
   }
 
-  private restoreLogin(): void {
+  private restoreSavedLogin(): void {
     try {
-      const value = localStorage.getItem(this.storageKey);
-      const session = value ? (JSON.parse(value) as LoginSession) : null;
+      const savedLogin = localStorage.getItem(this.storageKey);
+      if (!savedLogin) {
+        this.session = null;
+        this.user.set(null);
+        return;
+      }
+
+      const session = JSON.parse(savedLogin) as LoginSession | null;
       if (
         session &&
         (typeof session.user?.uid !== 'string' ||
@@ -167,36 +186,41 @@ export class AuthService {
           typeof session.accessToken !== 'string' ||
           typeof session.refreshToken !== 'string' ||
           !Number.isFinite(session.expiresAt))
-      )
+      ) {
         throw new Error('Invalid login');
+      }
+
       this.session = session;
-      this.user.set(session?.user || null);
+      this.user.set(session?.user ?? null);
     } catch {
       this.session = null;
       this.user.set(null);
       this.error.set('Your saved login could not be read. Please log in again.');
     }
-    this.initialized.set(true);
   }
 
   private forgetLogin(): void {
     this.session = null;
     this.user.set(null);
+    this.error.set('Your login expired. Please log in again.');
     try {
       localStorage.removeItem(this.storageKey);
     } catch {
-      /* The current in-memory session is still cleared. */
+      return;
     }
-    this.error.set('Your login expired. Please log in again.');
   }
 
-  expireLogin(uid: string): void {
-    if (this.session?.user.uid === uid) this.forgetLogin();
+  expireLogin(userId: string): void {
+    if (this.session?.user.uid === userId) {
+      this.forgetLogin();
+    }
   }
 }
 
 export function authErrorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return 'Could not complete the request. Please try again.';
+  if (!(error instanceof ApiError)) {
+    return 'Could not complete the request. Please try again.';
+  }
   switch (error.code) {
     case 'invalid_credentials':
       return 'Email or password is incorrect.';

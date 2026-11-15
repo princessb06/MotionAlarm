@@ -19,15 +19,13 @@ import { checkmarkCircleOutline } from 'ionicons/icons';
 
 import type { MovementAlert } from '../home/movement-alert';
 import { NATIVE_ALARM } from '../home/native-alarm';
-
-import { AlertHistoryService } from './alert-history.service';
+import { AlertHistoryService } from '../services/alert-history/alert-history.service';
 
 @Component({
   selector: 'app-alert-history',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.Eager,
-  templateUrl: 'alert-history.page.html',
-  styleUrls: ['alert-history.page.scss'],
+  templateUrl: './alert-history.page.html',
+  styleUrls: ['./alert-history.page.scss'],
   imports: [
     DatePipe,
     DecimalPipe,
@@ -59,7 +57,7 @@ export class AlertHistoryPage implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
-    if (!this.history.nativeAndroid) {
+    if (!this.history.isAndroidApp) {
       return;
     }
     try {
@@ -75,7 +73,6 @@ export class AlertHistoryPage implements OnInit, OnDestroy {
     }
   }
 
-  // Ionic keeps pages in memory. Refresh Android logs each time this page opens.
   ionViewWillEnter(): void {
     this.showToday();
     void this.loadHistory();
@@ -89,16 +86,16 @@ export class AlertHistoryPage implements OnInit, OnDestroy {
   }
 
   get visibleAlerts(): MovementAlert[] {
-    const result: MovementAlert[] = [];
+    const matchingAlerts: MovementAlert[] = [];
     for (const alert of this.history.alerts) {
       if (this.historyDate && this.localDate(new Date(alert.createdAt)) !== this.historyDate) {
         continue;
       }
       if (this.historyFilter === 'All' || alert.status === this.historyFilter) {
-        result.push(alert);
+        matchingAlerts.push(alert);
       }
     }
-    return result;
+    return matchingAlerts;
   }
 
   get newAlertCount(): number {
@@ -126,13 +123,13 @@ export class AlertHistoryPage implements OnInit, OnDestroy {
   }
 
   async toggleStatus(alert: MovementAlert): Promise<void> {
-    let status = 'New';
+    let newStatus: MovementAlert['status'] = 'New';
     if (alert.status === 'New') {
-      status = 'Reviewed';
+      newStatus = 'Reviewed';
     }
     try {
-      await this.history.toggleStatus(alert);
-      this.feedback = 'Alert marked ' + status.toLowerCase() + '.';
+      await this.history.setAlertStatus(alert.id, newStatus);
+      this.feedback = 'Alert marked ' + newStatus.toLowerCase() + '.';
     } catch (error) {
       this.showError(error, 'Could not update the alert. Try again.');
     }
@@ -206,7 +203,7 @@ export class AlertHistoryPage implements OnInit, OnDestroy {
 
   @HostListener('document:visibilitychange')
   onVisibilityChange(): void {
-    if (!document.hidden && this.history.nativeAndroid) {
+    if (!document.hidden && this.history.isAndroidApp) {
       void this.loadHistory();
     }
   }

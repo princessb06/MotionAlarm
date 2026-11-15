@@ -7,15 +7,15 @@ async function expectTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
   await expect(page.locator('html')).toHaveCSS('color-scheme', theme);
 }
 
-test('appearance follows the device and explicit choices survive navigation, reload and sign-out', async ({ page }) => {
-  await page.emulateMedia({ colorScheme: 'dark' });
+test('appearance defaults to Dark and choices survive navigation, reload and sign-out', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
   await expectTheme(page, 'dark');
   await page.getByLabel('Open settings').click();
   const appearance = page.getByLabel('Appearance', { exact: true });
-  await expect(appearance).toHaveValue('system');
+  await expect(appearance).toHaveValue('dark');
+  await expect(appearance.getByRole('option')).toHaveText(['Light', 'Dark']);
   await appearance.selectOption('light');
   await expectTheme(page, 'light');
-  await page.emulateMedia({ colorScheme: 'light' });
   await page.emulateMedia({ colorScheme: 'dark' });
   await expectTheme(page, 'light');
   await page.reload();
@@ -30,10 +30,8 @@ test('appearance follows the device and explicit choices survive navigation, rel
   await expectTheme(page, 'dark');
   await page.goto('/settings');
   await expect(appearance).toHaveValue('dark');
-  await appearance.selectOption('system');
   await page.emulateMedia({ colorScheme: 'light' });
-  await expectTheme(page, 'light');
-  await appearance.selectOption('dark');
+  await expectTheme(page, 'dark');
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
