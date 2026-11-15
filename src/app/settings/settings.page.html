@@ -14,13 +14,7 @@
       <h1 id="settings-heading">Settings</h1>
       <div class="setting appearance-setting">
         <label for="appearance">Appearance</label>
-        <p id="appearance-help">Choose a theme for this device. Your choice is saved automatically.</p>
-        <select
-          id="appearance"
-          [ngModel]="theme.currentTheme()"
-          (ngModelChange)="theme.setTheme($event)"
-          aria-describedby="appearance-help"
-        >
+        <select id="appearance" [ngModel]="theme.currentTheme()" (ngModelChange)="theme.setTheme($event)">
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
@@ -33,13 +27,7 @@
       <div class="settings-grid">
         <div class="setting sensitivity-setting">
           <label for="sensitivity">Movement sensitivity</label>
-          <p id="sensitivity-help">Higher sensitivity catches smaller movements.</p>
-          <select
-            id="sensitivity"
-            [(ngModel)]="settings.threshold"
-            [disabled]="settingsLocked"
-            aria-describedby="sensitivity-help"
-          >
+          <select id="sensitivity" [(ngModel)]="settings.threshold" [disabled]="settingsLocked">
             <option [ngValue]="0.9">High · small movements</option>
             <option [ngValue]="1.8">Balanced · everyday use</option>
             <option [ngValue]="3.2">Low · larger movements</option>
